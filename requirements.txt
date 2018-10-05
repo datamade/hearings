@@ -1,3 +1,4 @@
 pupa
 xmltodict
 http://github.com/datamade/govinfo/zipball/master
+https://github.com/opencivicdata/python-opencivicdata/zipball/longer_event_names
