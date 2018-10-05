@@ -1,9 +1,12 @@
 # hearings
 How do Congressional Hearings Change?
 
-# scrapers
 
-## congress
-congress scraper requires python 2
+```bash
+pip install -r requirements.txt
+createdb hearings
+export DATABASE_URL=postgresql:///hearings
+pupa dbinit us
+pupa update us
+```
 
-./run committee_meetings
