@@ -92,7 +92,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                                  note='committee member')
 
             links = mods['mods']['location']['url']                
-            for link in links:
+            for link in self._unique(links):
                 if link['@displayLabel'] == 'Content Detail':
                     event.add_source(link['#text'],
                                      note='web')
@@ -109,7 +109,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
             yield event
 
-            
+            break
 
     def _name_type(self, names, name_type):
         if type(names) is not list:
