@@ -30,7 +30,7 @@ class Us(Jurisdiction):
                              classification='lower',
                              parent_id=legislature._id)
 
-        if True:
+        if False:
             self._posts(upper, lower)
 
         yield legislature
