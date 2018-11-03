@@ -1,5 +1,5 @@
 https://github.com/opencivicdata/pupa/zipball/resolve_orgs_on_dates
 xmltodict
-http://github.com/datamade/govinfo/zipball/master
 https://github.com/opencivicdata/python-opencivicdata/zipball/longer_event_names
 PyYAML --no-binary=PyYAML
+http://github.com/datamade/govinfo/zipball/master
