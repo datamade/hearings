@@ -1,0 +1,8 @@
+version: '3.3'
+services:
+  postgres:
+    image: mdillon/postgis
+    container_name: hearings-postgres
+    ports:
+      - '5433:5432'
+    restart: on-failure
