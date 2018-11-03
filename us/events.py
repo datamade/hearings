@@ -67,6 +67,9 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 if sub_committees:
                     for sub_committee_d in sub_committees:
                         committee_name = sub_committee_d['name']['#text']
+                        if committee_name == 'Subcommittee on Government Operations':
+                            import pdb
+                            pdb.set_trace()
                         event.add_committee(committee_name,
                                             note='host')
 

@@ -80,8 +80,14 @@ class UsCommitteeScraper(Scraper):
 
             c.add_source('https://github.com/unitedstates/congress-legislators/blob/master/committees-historical.yaml')
             
-            for name in committee['names'].values():
-                c.add_name(name)
+            for name in set(committee['names'].values()):
+                if chamber == 'lower':
+                    name = 'House Committee on ' + name
+                elif chamber == 'upper':
+                    name = 'Senate Committee on ' + name
+                    
+                if name != c.name:
+                    c.add_name(name)
 
 
             yield c
@@ -116,10 +122,13 @@ class UsCommitteeScraper(Scraper):
                     print(thomas_id)
                     #input()
 
-                for name in subcommittee['names'].values():
-                    sc.add_name(name)
+                for name in set(subcommittee['names'].values()):
+                    name = 'Subcommittee on ' + name
+                    if name != sc.name:
+                        sc.add_name(name)
 
                 yield sc
+                
 
 def duration(committee):
     first_congress = min(committee['congresses'])
