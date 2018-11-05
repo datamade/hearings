@@ -2,6 +2,7 @@ from pupa.scrape import Scraper
 from pupa.scrape import Event
 from pupa.utils import _make_pseudo_id
 
+import string
 import datetime
 import collections
 import pprint
@@ -42,9 +43,30 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
         if start_time is None:
             start_time = datetime.datetime(2018, 6, 5, 0, 0, tzinfo=pytz.utc)
 
+        dupes = {}
         uniq = {}
 
         for i, hearing in enumerate(self.congressional_hearings(start_time)):
+            package_id = hearing['packageId']
+            package_num, = re.findall('\d+$', package_id)
+
+            # For appropriations hearings, the committees tend to
+            # publish portions of the hearings as they are completed,
+            # and then the final hearing are usually compiled,
+            # printed, and added to the repository at the request of
+            # the Committee.
+            #
+            # packages with 8 digits after hrg are the in-process
+            # version
+            #
+            # There could be some time between the in-process and
+            # final packages. Publication of hearings is the purview
+            # of the committee.
+            #
+            # https://github.com/usgpo/api/issues/21#issuecomment-435926223
+            if len(package_num) == 8:
+                continue
+
             mods_link = hearing['download']['modsLink']
             response = self.get(mods_link)
             mods = xmltodict.parse(response.content)
@@ -53,8 +75,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
             granule_class = extension.get('granuleClass', 'boo')
             if granule_class == 'ERRATA':
                 continue
-            elif granule_class not in {'OTHERPART', 'FIRSTPART', 'boo'}:
-                raise
+
 
             meeting_type = self._meeting_type(extension)
             if meeting_type is None:
@@ -74,13 +95,31 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 continue
 
             for committee_d in self._unique(extension.get('congCommittee', [])):
-                parent, sub_committees = self._subcommittees(committee_d)
+                names = committee_d['name']
+                committee_name = self._name_type(names,
+                                                 'authority-standard')
+                if committee_name is None:
+                    committee_name = self._name_type(names,
+                                                     'authority-short')
+
+                if committee_d['@chamber'] == 'H':
+                    committee_name = 'House ' + committee_name
+                elif committee_d['@chamber'] == 'S':
+                    committee_name = 'Senate ' + committee_name
+
+                try:
+                    thomas_id = committee_d['@authorityId'].upper()
+                except KeyError:
+                    thomas_id = None
+
+                sub_committees = self._subcommittees(committee_d)
                 if sub_committees:
                     for sub_committee_d in sub_committees:
-                        committee_name = sub_committee_d['name']['#text']
-                        sub_committee_id = _make_pseudo_id(name=committee_name,
-                                                           parent__name=parent)
-                        ret = {"name": committee_name,
+                        sub_committee_name = sub_committee_d['name']['#text']
+                        sub_committee_name = sub_committee_name.strip(string.punctuation)
+                        sub_committee_id = _make_pseudo_id(name=sub_committee_name,
+                                                           parent__identifiers__identifier=thomas_id)
+                        ret = {"name": sub_committee_name,
                                "entity_type": 'organization',
                                "note": 'host',
                                "organization_id": sub_committee_id,
@@ -88,35 +127,15 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                         event.participants.append(ret)
 
                 else:
-                    names = committee_d['name']
-                    committee_name = self._name_type(names,
-                                                     'authority-standard')
-                    if committee_name is None:
-                        committee_name = self._name_type(names,
-                                                         'authority-short')
+                    if thomas_id:
+                        ret = {"name": committee_name,
+                               "entity_type": 'organization',
+                               "note": 'host',
+                               "organization_id": _make_pseudo_id(identifiers__identifier=thomas_id)}
+                        event.participants.append(ret)
+                    else:
+                        event.add_committee(committee_name, note='host')
 
-                    if committee_d['@chamber'] == 'H':
-                        committee_name = 'House ' + committee_name
-                    elif committee_d['@chamber'] == 'S':
-                        committee_name = 'Senate ' + committee_name
-                    elif committee_d['@chamber'] != 'J':
-                        import pdb
-                        pdb.set_trace()
-                    event.add_committee(committee_name,
-                                        note='host')
-
-
-            # for witness in extension.get('witness', []):
-            #     event.add_person(witness,
-            #                      note='witness')
-
-            # for congress_person in self._unique(extension.get('congMember', [])):
-            #     names = congress_person['name']
-            #     name = self._name_type(names,
-            #                            'authority-fnf')
-                
-            #     event.add_person(name,
-            #                      note='committee member')
 
             links = mods['mods']['location']['url']                
             for link in self._unique(links):
@@ -142,7 +161,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 multi_part[event.name][extension['volumeNumber']] = event
                 continue
 
-            self._unique_event(uniq, event)
+            self._unique_event(uniq, event, dupes)
 
         for parts in multi_part.values():
             parts = iter(parts.items())
@@ -158,12 +177,12 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                     event.add_source(source['url'],
                                      note=source['note'] + ', part {}'.format(part_number))
 
-            self._unique_event(uniq, event)
+            self._unique_event(uniq, event, dupes)
 
         for event in uniq.values():
             yield event
 
-    def _unique_event(self, uniq, event):
+    def _unique_event(self, uniq, event, dupes):
         event_key = (event.name, event.start_date)
         other_event = uniq.get(event_key)
 
@@ -174,20 +193,29 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
             if this_package_num < other_package_num:
                 uniq[event_key] = event
 
+            if event_key in dupes:
+                dupes[event_key].append(self._api_url(event))
+            else:
+                dupes[event_key] = [self._api_url(other_event),
+                                    self._api_url(event)]
         else:
             uniq[event_key] = event
 
 
     def _package_num(self, event):
+        api_url = self._api_url(event)
+        api_url = api_source['url']
+        package_id = api_url.split('/')[-2]
+        package_num, = re.findall('\d+$', package_id)
+        return package_num
+
+    def _api_url(self, event):
         try:
             api_source, = (source for source in event.sources if source['note'] == 'API')
         except ValueError:
             api_source = min((source for source in event.sources if source['note'].startswith('API')), key=lambda source: source['url'])
 
-        api_url = api_source['url']
-        package_id = api_url.split('/')[-2]
-        package_num, = re.findall('\d+$', package_id)
-        return package_num
+        return api_source['url']
 
 
     def _name_type(self, names, name_type):
@@ -241,10 +269,4 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 else:
                     subcommittees.append(sub_committee_d)
 
-        if subcommittees:
-            parent_names = committee_d['name']
-            parent_name = self._name_type(parent_names,
-                                          'authority-standard')
-            return parent_name, subcommittees
-        else:
-            return None, []
+        return subcommittees
