@@ -1,12 +1,15 @@
 from pupa.scrape import Scraper
 from pupa.scrape import Event
+from pupa.utils import _make_pseudo_id
+
+import datetime
+import collections
+import pprint
+import re
 
 import govinfo
-import datetime
 import pytz
 import xmltodict
-import pprint
-import collections
 
 API_KEY = 'E88VmdJAEOaI9xk4e2SHhsxBTP508sPSGH3aRT7j'
 
@@ -39,11 +42,19 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
         if start_time is None:
             start_time = datetime.datetime(2018, 6, 5, 0, 0, tzinfo=pytz.utc)
 
+        uniq = {}
+
         for i, hearing in enumerate(self.congressional_hearings(start_time)):
             mods_link = hearing['download']['modsLink']
             response = self.get(mods_link)
             mods = xmltodict.parse(response.content)
             extension = collections.ChainMap(*mods['mods']['extension'])
+
+            granule_class = extension.get('granuleClass', 'boo')
+            if granule_class == 'ERRATA':
+                continue
+            elif granule_class not in {'OTHERPART', 'FIRSTPART', 'boo'}:
+                raise
 
             meeting_type = self._meeting_type(extension)
             if meeting_type is None:
@@ -63,15 +74,18 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 continue
 
             for committee_d in self._unique(extension.get('congCommittee', [])):
-                sub_committees = self._subcommittees(committee_d)
+                parent, sub_committees = self._subcommittees(committee_d)
                 if sub_committees:
                     for sub_committee_d in sub_committees:
                         committee_name = sub_committee_d['name']['#text']
-                        if committee_name == 'Subcommittee on Government Operations':
-                            import pdb
-                            pdb.set_trace()
-                        event.add_committee(committee_name,
-                                            note='host')
+                        sub_committee_id = _make_pseudo_id(name=committee_name,
+                                                           parent__name=parent)
+                        ret = {"name": committee_name,
+                               "entity_type": 'organization',
+                               "note": 'host',
+                               "organization_id": sub_committee_id,
+                               }
+                        event.participants.append(ret)
 
                 else:
                     names = committee_d['name']
@@ -124,10 +138,11 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 multi_part[event.name][extension['partNumber']] = event
                 continue
 
-            yield event
+            if 'volumeNumber' in extension:
+                multi_part[event.name][extension['volumeNumber']] = event
+                continue
 
-            if i > 100:
-                break
+            self._unique_event(uniq, event)
 
         for parts in multi_part.values():
             parts = iter(parts.items())
@@ -143,7 +158,37 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                     event.add_source(source['url'],
                                      note=source['note'] + ', part {}'.format(part_number))
 
+            self._unique_event(uniq, event)
+
+        for event in uniq.values():
             yield event
+
+    def _unique_event(self, uniq, event):
+        event_key = (event.name, event.start_date)
+        other_event = uniq.get(event_key)
+
+        if other_event:
+            other_package_num = self._package_num(other_event)
+            this_package_num = self._package_num(event)
+
+            if this_package_num < other_package_num:
+                uniq[event_key] = event
+
+        else:
+            uniq[event_key] = event
+
+
+    def _package_num(self, event):
+        try:
+            api_source, = (source for source in event.sources if source['note'] == 'API')
+        except ValueError:
+            api_source = min((source for source in event.sources if source['note'].startswith('API')), key=lambda source: source['url'])
+
+        api_url = api_source['url']
+        package_id = api_url.split('/')[-2]
+        package_num, = re.findall('\d+$', package_id)
+        return package_num
+
 
     def _name_type(self, names, name_type):
         if type(names) is not list:
@@ -181,7 +226,10 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
        title_info = mods['mods']['titleInfo']
        for each in title_info:
            if 'title' in each:
-               return each['title'][:1000]
+               title = each['title']
+               if title:
+                   title = title[:1000]
+               return title
                               
     def _subcommittees(self, committee_d):
         subcommittees = []
@@ -193,4 +241,10 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 else:
                     subcommittees.append(sub_committee_d)
 
-        return subcommittees
+        if subcommittees:
+            parent_names = committee_d['name']
+            parent_name = self._name_type(parent_names,
+                                          'authority-standard')
+            return parent_name, subcommittees
+        else:
+            return None, []
