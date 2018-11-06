@@ -12,6 +12,8 @@ import govinfo
 import pytz
 import xmltodict
 
+from .house import HouseCommittee
+
 API_KEY = 'E88VmdJAEOaI9xk4e2SHhsxBTP508sPSGH3aRT7j'
 
 class UsEventScraper(govinfo.GovInfo, Scraper):
@@ -37,6 +39,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 
 
     def scrape(self, start_time=None):
+
 
         multi_part = collections.defaultdict(dict)
 
@@ -163,6 +166,9 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
             self._unique_event(uniq, event, dupes)
 
+            if i > 100:
+                break
+
         for parts in multi_part.values():
             parts = iter(parts.items())
             part_number, event = next(parts)
@@ -178,6 +184,8 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                                      note=source['note'] + ', part {}'.format(part_number))
 
             self._unique_event(uniq, event, dupes)
+
+        self._house_docs(uniq)
 
         for event in uniq.values():
             yield event
@@ -201,10 +209,96 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
         else:
             uniq[event_key] = event
 
+    def _house_docs(self, uniq):
+        _house_docs ={}
+
+        house_scraper = HouseCommittee(cache_storage=self.cache_storage,
+                                       requests_per_minute=self.requests_per_minute)
+        for link, hearing_xml in house_scraper.scrape():
+            meeting_title, = hearing_xml.xpath('//meeting-title/text()')
+            start_date, = hearing_xml.xpath('//meeting-date/calendar-date/text()')
+
+            try:
+                room, = hearing_xml.xpath('//room/text()')
+            except ValueError:
+                location = 'unknown'
+            else:
+                location = '{} {}'.format(hearing_xml.xpath('//building/text()')[0],
+                                          room)
+
+            meeting_title = meeting_title.upper()
+            event = uniq.get((meeting_title.upper(), start_date))
+
+            if event is not None:
+                event.location = {"name": location, "note": "", "coordinates": None}
+                event.add_source(link, note='docs.house.gov XML')
+                self._add_house_docs(event, hearing_xml)
+
+            else:
+
+                event = Event(name=meeting_title[:1000],
+                              start_date=start_date,
+                              location_name=location)
+
+                event.add_source(link, note='docs.house.gov XML')
+
+                for sub_committee in hearing_xml.xpath('//subcommittees/committee-name'):
+                    name, = sub_committee.xpath('.//text()')
+                    thomas_id = sub_committee.attrib['parent-id']
+                    participant =  {"name": name,
+                                    "entity_type": 'organization',
+                                    "note": 'host',
+                                    "organization_id": _make_pseudo_id(name=name,
+                                                                       parent__identifiers__identifier=thomas_id),
+                               }
+                    event.participants.append(participant)
+
+                for committee in hearing_xml.xpath('//committees/committee-name'):
+                    name, = committee.xpath('.//text()')
+                    thomas_id = committee.attrib['id']
+                    participant =  {"name": name,
+                                    "entity_type": 'organization',
+                                    "note": 'host',
+                                    "organization_id": _make_pseudo_id(identifiers__identifier=thomas_id),
+                    }
+
+                    event.participants.append(participant)
+
+                self._add_house_docs(event, hearing_xml)
+
+                uniq[(meeting_title, start_date)] = event
+
+
+    def _add_house_docs(self, event, hearing_xml):
+        media_type = {'PDF': 'application/pdf',
+                      'XML': 'text/xml'}
+
+        seen_docs = set()
+        for doc in hearing_xml.xpath('//meeting-document'):
+            if doc.attrib['type'] in {'BR', 'SD', 'FR'}:
+                continue
+
+            try:
+                doc_description, = doc.xpath('.//description/text()')
+            except ValueError:
+                continue
+
+            for doc_file in doc.xpath('.//files/file'):
+
+                doc_url = doc_file.attrib['doc-url']
+                if doc_url in seen_docs:
+                    continue
+                else:
+                    seen_docs.add(doc_url)
+
+                doc_mime_type = media_type[doc_file.attrib['doc-type']]
+                event.add_document(doc_description[:300],
+                                   doc_url,
+                                   media_type=doc_mime_type)
+
 
     def _package_num(self, event):
         api_url = self._api_url(event)
-        api_url = api_source['url']
         package_id = api_url.split('/')[-2]
         package_num, = re.findall('\d+$', package_id)
         return package_num
