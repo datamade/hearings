@@ -166,9 +166,6 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
             self._unique_event(uniq, event, dupes)
 
-            if i > 100:
-                break
-
         for parts in multi_part.values():
             parts = iter(parts.items())
             part_number, event = next(parts)
