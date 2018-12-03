@@ -1,6 +1,6 @@
 https://github.com/opencivicdata/pupa/zipball/resolve_orgs_on_dates
 xmltodict
-https://github.com/opencivicdata/python-opencivicdata/zipball/longer_event_names
+https://github.com/opencivicdata/python-opencivicdata/archive/f6c1174300e7e0ee936531762d176da3eb3c5a54.zip
 PyYAML --no-binary=PyYAML
 http://github.com/datamade/govinfo/zipball/master
 lxml
