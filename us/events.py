@@ -56,7 +56,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 package_num, = re.findall('\d+$', package_id)
             except ValueError:
                 bad_ids.append(package_id)
-                break
+                continue
             # For appropriations hearings, the committees tend to
             # publish portions of the hearings as they are completed,
             # and then the final hearing are usually compiled,
@@ -193,7 +193,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
         with open('bad_ids.txt', 'w') as f:
             for id in bad_ids:
-                f.write(id)
+                f.write(id + '\n')
 
     def _unique_event(self, uniq, event, dupes):
         event_key = (event.name, event.start_date)
