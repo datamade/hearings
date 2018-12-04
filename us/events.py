@@ -36,7 +36,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                           'N': 'Nomination Hearing'}
 
         return codes_to_types[meeting_code]
-                
+
 
     def scrape(self, start_time=None):
 
@@ -48,11 +48,15 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
         dupes = {}
         uniq = {}
+        bad_ids = []
 
         for i, hearing in enumerate(self.congressional_hearings(start_time)):
             package_id = hearing['packageId']
-            package_num, = re.findall('\d+$', package_id)
-
+            try:
+                package_num, = re.findall('\d+$', package_id)
+            except ValueError:
+                bad_ids.append(package_id)
+                break
             # For appropriations hearings, the committees tend to
             # publish portions of the hearings as they are completed,
             # and then the final hearing are usually compiled,
@@ -83,7 +87,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
             meeting_type = self._meeting_type(extension)
             if meeting_type is None:
                 continue
-            
+
             held_date = extension['heldDate']
             if type(held_date) is list:
                 start_date = min(held_date)
@@ -140,7 +144,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                         event.add_committee(committee_name, note='host')
 
 
-            links = mods['mods']['location']['url']                
+            links = mods['mods']['location']['url']
             for link in self._unique(links):
                 if link['@displayLabel'] == 'Content Detail':
                     event.add_source(link['#text'],
@@ -153,7 +157,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                     event.add_document('transcript',
                                        link['#text'],
                                        media_type='application/pdf')
-                
+
             event.add_source(mods_link, note='API')
 
             if 'partNumber' in extension:
@@ -186,6 +190,10 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
         for event in uniq.values():
             yield event
+
+        with open('bad_ids.txt', 'w') as f:
+            for id in bad_ids:
+                f.write(id)
 
     def _unique_event(self, uniq, event, dupes):
         event_key = (event.name, event.start_date)
@@ -328,7 +336,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
         else:
             return max((name['#text'] for name in chosen_name),
                        key=len)
-                            
+
 
     def _unique(self, iterable):
         if type(iterable) is not list:
@@ -349,7 +357,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                if title:
                    title = title[:1000]
                return title
-                              
+
     def _subcommittees(self, committee_d):
         subcommittees = []
         if 'subCommittee' in committee_d:
