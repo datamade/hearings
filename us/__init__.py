@@ -15,7 +15,6 @@ class Us(Jurisdiction):
     url = "https://www.congress.gov/"
     scrapers = {
         "events": UsEventScraper,
-        "people": UsPersonScraper,
         "committees": UsCommitteeScraper,
     }
 
@@ -29,9 +28,6 @@ class Us(Jurisdiction):
         lower = Organization('United States House of Representatives',
                              classification='lower',
                              parent_id=legislature._id)
-
-        if False:
-            self._posts(upper, lower)
 
         yield legislature
         yield upper
