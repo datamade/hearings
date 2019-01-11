@@ -57,7 +57,13 @@ class UsCommitteeScraper(Scraper):
                 print(committee)
                 raise
 
-            c = Organization(committee['name'],
+            _, current_name = max(committee['names'].items())
+            if chamber == 'lower':
+                current_name = 'House Committee on ' + current_name
+            elif chamber == 'upper':
+                current_name = 'Senate Committee on ' + current_name
+
+            c = Organization(current_name,
                              classification='committee',
                              chamber=chamber)
 
