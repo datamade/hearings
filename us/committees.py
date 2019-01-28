@@ -57,7 +57,10 @@ class UsCommitteeScraper(Scraper):
                 print(committee)
                 raise
 
-            _, current_name = max(committee['names'].items())
+            names_int = {int(key):name for key, name in committee['names'].items()}
+
+            _, current_name = max(names_int)
+
             if chamber == 'lower':
                 current_name = 'House Committee on ' + current_name
             elif chamber == 'upper':
@@ -85,13 +88,13 @@ class UsCommitteeScraper(Scraper):
 
 
             c.add_source('https://github.com/unitedstates/congress-legislators/blob/master/committees-historical.yaml')
-            
+
             for name in set(committee['names'].values()):
                 if chamber == 'lower':
                     name = 'House Committee on ' + name
                 elif chamber == 'upper':
                     name = 'Senate Committee on ' + name
-                    
+
                 if name != c.name:
                     c.add_name(name)
 
@@ -115,7 +118,7 @@ class UsCommitteeScraper(Scraper):
                              + subcommittee['thomas_id'])
                 sc.add_identifier(thomas_id,
                                   scheme='thomas_id')
-                
+
 
                 sc.add_source('https://github.com/unitedstates/congress-legislators/blob/master/committees-historical.yaml')
 
@@ -134,7 +137,7 @@ class UsCommitteeScraper(Scraper):
                         sc.add_name(name)
 
                 yield sc
-                
+
 
 def duration(committee):
     first_congress = min(committee['congresses'])
@@ -143,6 +146,5 @@ def duration(committee):
         end = None
     else:
         end = CONGRESSES[last_congress + 1]
-    
+
     return CONGRESSES[first_congress], end
-                         
