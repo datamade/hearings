@@ -58,7 +58,6 @@ class UsCommitteeScraper(Scraper):
                 raise
 
             names_int = {int(key):name for key, name in committee['names'].items()}
-
             _, current_name = max(names_int)
 
             if chamber == 'lower':
