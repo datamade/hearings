@@ -102,7 +102,11 @@ class UsCommitteeScraper(Scraper):
 
 
             for subcommittee in committee.get('subcommittees', []):
-                sc = Organization('Subcommittee on ' + subcommittee['name'],
+
+                names_int = {int(key):name for key, name in subcommittee['names'].items()}
+                _, current_name = max(names_int.items())
+
+                sc = Organization('Subcommittee on ' + current_name,
                                   classification='committee',
                                   parent_id=c)
 
