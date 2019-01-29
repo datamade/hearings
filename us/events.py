@@ -101,6 +101,11 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
             if not event.name:
                 continue
 
+            if 'number' in extension:
+                hearing_number = '{docClass} {congress}-{number}'.format(**extension)
+                print(hearing_number)
+                event.extras['hearing_number'] = hearing_number
+
             for committee_d in self._unique(extension.get('congCommittee', [])):
                 names = committee_d['name']
                 committee_name = self._name_type(names,
@@ -169,6 +174,7 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
                 continue
 
             self._unique_event(uniq, event, dupes)
+       
 
         for parts in multi_part.values():
             parts = iter(parts.items())
