@@ -40,11 +40,8 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
     def scrape(self, start_time=None):
 
-
-        multi_part = collections.defaultdict(dict)
-
         if start_time is None:
-            start_time = datetime.datetime(2018, 6, 5, 0, 0, tzinfo=pytz.utc)
+            start_time = datetime.datetime(2017, 1, 1, 0, 0, tzinfo=pytz.utc)
 
         dupes = {}
         uniq = {}
@@ -165,32 +162,8 @@ class UsEventScraper(govinfo.GovInfo, Scraper):
 
             event.add_source(mods_link, note='API')
 
-            if 'partNumber' in extension:
-                multi_part[event.name][extension['partNumber']] = event
-                continue
-
-            if 'volumeNumber' in extension:
-                multi_part[event.name][extension['volumeNumber']] = event
-                continue
-
             self._unique_event(uniq, event, dupes)
        
-
-        for parts in multi_part.values():
-            parts = iter(parts.items())
-            part_number, event = next(parts)
-            sources = event.sources
-            event.sources = []
-            for source in sources:
-                event.add_source(source['url'],
-                                 note=source['note'] + ', part {}'.format(part_number))
-
-            for part_number, other_event in parts:
-                for source in other_event.sources:
-                    event.add_source(source['url'],
-                                     note=source['note'] + ', part {}'.format(part_number))
-
-            self._unique_event(uniq, event, dupes)
 
         self._house_docs(uniq)
 
